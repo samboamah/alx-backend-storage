@@ -1,34 +1,54 @@
 #!/usr/bin/env python3
-""" expiring web cache module """
-
+"""
+Module web
+"""
 import redis
 import requests
 from typing import Callable
-from functools import wraps
-
-redis = redis.Redis()
 
 
-def wrap_requests(fn: Callable) -> Callable:
-    """ Decorator wrapper """
+_redis = redis.Redis()
 
-    @wraps(fn)
-    def wrapper(url):
-        """ Wrapper for decorator guy """
-        redis.incr(f"count:{url}")
-        cached_response = redis.get(f"cached:{url}")
-        if cached_response:
-            return cached_response.decode('utf-8')
-        result = fn(url)
-        redis.setex(f"cached:{url}", 10, result)
-        return result
 
+def count_access(func: Callable) -> Callable:
+    """
+    Counts the number of times
+    a url was accessed
+    """
+    def wrapper(*args, **kwargs):
+        """wrapper"""
+        key = "count:{}".format(args[0])
+        _redis.incr(key)
+        return func(*args, **kwargs)
     return wrapper
 
 
-@wrap_requests
-def get_page(url: str) -> str:
-    """get page self descriptive
+def get_cache(func: Callable) -> Callable:
     """
+    Counts the number of times
+    a url was accessed
+    """
+    def wrapper(*args, **kwargs):
+        """wrapper"""
+        key = "result:{}".format(args[0])
+        if _redis.exists(key):
+            data = _redis.get(key)
+            return data.decode('utf-8')
+        return func(*args, **kwargs)
+    return wrapper
+
+
+@get_cache
+@count_access
+def get_page(url: str) -> str:
+    """
+    Obtains the HTML content of a
+    particular URL and returns it
+    """
+    key = "result:{}".format(url)
+
     response = requests.get(url)
+
+    _redis.set(key, response.text, ex=10)
+
     return response.text
